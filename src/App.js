@@ -1,25 +1,21 @@
-import logo from './logo.svg';
-import './App.css';
+import React from 'react'
+// import BaseForm from './components/BaseForm'
 
-function App() {
+import Simulator from './components/Simulator'
+
+const App = () => {
+  Number.prototype.round = function() {
+    return Math.round(this * 1000.0) / 1000.0
+  }
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div>
+{/*      <BaseForm />
+*/}    
+      <Simulator/>
+
     </div>
-  );
+  )
 }
 
-export default App;
+export default App
