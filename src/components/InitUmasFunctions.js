@@ -1,7 +1,13 @@
-import Coef from '../features/Coef'
 import { calSpCost } from './CustomFunctions'
 
-const coefData = (uma, params) => ({
+import SysSetting from '../features/SysSetting'
+import Constant from '../features/Constant'
+import Coef from '../features/Coef'
+import CourseData from '../features/CourseData.json'
+
+const { framesPerSec, frameLength, statusType } = SysSetting
+
+const coefData = (uma) => ({
   motBonus: Coef.motivation.[uma.motivation],
   styleFitCoef: Coef.styleFit.[uma.fit.style],
   distFitCoef: Coef.distFit.[uma.fit.dist],
@@ -9,25 +15,10 @@ const coefData = (uma, params) => ({
   usingStyleCoef: Coef.usingStyle.[uma.usingStyle],
 })
 
-// const {     
-//         trackData,
-//         surfaceConstant,
-//         surfaceCoef,
-//         baseV,
-//         frameLength,
-//         framesPerSec,
-//         statusType
-//       } = useMemo(() => params, [])
-// const { 
-//         dist, phaseLine, sectionDist, 
-//         slopes, statusCheck
-//       } = useMemo(() => trackData, [])
-
-export const initStatus = (uma, params) => {
+const initStatus = (uma, raceParams) => {
   const rawStatus = uma.status
-
-  const { motBonus, styleFitCoef, distFitCoef, surfaceFitCoef, usingStyleCoef } = coefData(uma, params)
-  const { statusCheck } = params.trackData
+  const { motBonus, styleFitCoef, distFitCoef, surfaceFitCoef, usingStyleCoef } = coefData(uma)
+  const { statusCheck, statusType } = raceParams
 
 
   // multiply by track status check
@@ -35,7 +26,7 @@ export const initStatus = (uma, params) => {
     let multiplier = 1
     if (statusCheck.length > 0) {
       for (let sc of statusCheck) {
-        let statusGetCheck = params.statusType[sc - 1]
+        let statusGetCheck = statusType[sc - 1]
         let statusToCheck = rawStatus.[statusGetCheck] * motBonus
 
         multiplier += Math.min(Math.ceil(statusToCheck / 300), 4) * .05
@@ -55,9 +46,9 @@ export const initStatus = (uma, params) => {
   }
 
   const status =  {
-    speed: (rawStatus.speed * motBonus * speedMutiplier + params.surfaceConstant.speed + passiveSkillEffect.speed).round(),
+    speed: (rawStatus.speed * motBonus * speedMutiplier + raceParams.surfaceConstant.speed + passiveSkillEffect.speed).round(),
     stamina: (rawStatus.stamina * motBonus + passiveSkillEffect.stamina).round(),
-    power: (rawStatus.power * motBonus + params.surfaceConstant.power + passiveSkillEffect.power).round(),
+    power: (rawStatus.power * motBonus + raceParams.surfaceConstant.power + passiveSkillEffect.power).round(),
     guts: (rawStatus.guts * motBonus + passiveSkillEffect.guts).round(),
     wisdom: (rawStatus.wisdom * motBonus * styleFitCoef.wisdom + passiveSkillEffect.wisdom).round(),
   }
@@ -65,9 +56,11 @@ export const initStatus = (uma, params) => {
   return { rawStatus, status }
 }
 
-export const initUmaCond = (uma, params, {rawStatus, status}) => {
-  const { motBonus, styleFitCoef, distFitCoef, surfaceFitCoef, usingStyleCoef } = coefData(uma, params)
+export const initUmaCond = (uma, raceParams, {rawStatus, status}) => {
+  const { motBonus, styleFitCoef, distFitCoef, surfaceFitCoef, usingStyleCoef } = coefData(uma)
 	const {     
+					dist, phaseLine, sectionDist, 
+	        slopes, statusCheck,
 	        trackData,
 	        surfaceConstant,
 	        surfaceCoef,
@@ -75,15 +68,10 @@ export const initUmaCond = (uma, params, {rawStatus, status}) => {
 	        frameLength,
 	        framesPerSec,
 	        statusType
-	      } = params
-	const { 
-	        dist, phaseLine, sectionDist, 
-	        slopes, statusCheck
-	      } = params.trackData
-
+	      } = raceParams
   const skillActRate = Math.max(100 - 90.0 / (rawStatus.wisdom * motBonus), 20)
   const temptRate = (6.5 / Math.log10(0.1 * status.wisdom + 1)) ** 2
-
+  const posKeepRate = ((uma.usingStyle === '1') ? 20 : 15) * Math.log10(0.1 * status.wisdom)
   const v = (() => {
 
     ///////////
@@ -93,7 +81,7 @@ export const initUmaCond = (uma, params, {rawStatus, status}) => {
     // wisMod.min = (wisMod.max - .65)
     // wisMod.avg = (wisMod.max - .325)
 
-    const wisMod = ((status.wisdom / 5500) * (Math.log10(status.wisdom) - 1) - .325) * .01
+    const wisMod = ((status.wisdom / 5500) * (Math.log10(status.wisdom * 0.1)) - 0.325) * 0.01
     const vCoef = usingStyleCoef.v
     const speedEffect = (((status.speed * 500) ** .5) * distFitCoef.v * .002)
 
@@ -102,6 +90,7 @@ export const initUmaCond = (uma, params, {rawStatus, status}) => {
       phase0: (baseV * (vCoef.phase0 + wisMod)).round(),
       phase1: (baseV * (vCoef.phase1 + wisMod)).round(),
       phase2: (baseV * (vCoef.phase2 + wisMod) + speedEffect).round(),
+      phase3: (baseV * (vCoef.phase2 + wisMod) + speedEffect).round(),
       tiring: (baseV * 0.85 + ((status.guts * 200) ** .5) * .001).round(),
     }
     tmp.spurting = (((tmp.phase2 + baseV * .01) * 1.05 + speedEffect)).round()
@@ -142,9 +131,10 @@ export const initUmaCond = (uma, params, {rawStatus, status}) => {
   spCostCoef.spurting = 1 + (200 / ((600 * status.guts) ** .5)).round()
   const spMax = (dist + 0.8 * status.stamina * usingStyleCoef.sp).round()
 
-  const safeSpurtSp = calSpCost(v.spurting, (dist / 3) / v.spurting, spCostCoef.spurting, params)
+  const safeSpurtSp = calSpCost(v.spurting, (dist / 3) / v.spurting, spCostCoef.spurting, raceParams)
+  const usingStyle = uma.usingStyle
 
-  return { skillActRate, temptRate, v, a, spCostCoef, spMax, safeSpurtSp}
+  return { skillActRate, temptRate, v, a, spCostCoef, spMax, safeSpurtSp, posKeepRate,usingStyle }
 
 }
 
@@ -155,4 +145,30 @@ export const initUmaRandCond = temptRate => {
                         	: -1
     return { temptSection }
 }
-// initFunctions.js
+
+export const initUmas = (umas, raceParams) => {
+	const umasParams = []
+
+	umas.forEach((uma, index) =>{
+    // uma status after modifyng
+    let { rawStatus, status } = initStatus(uma, raceParams)
+
+    // race evaluate (fixed)
+    let { skillActRate, temptRate, spCostCoef, spMax, v, a, safeSpurtSp, posKeepRate, usingStyle } = initUmaCond(uma, raceParams, {rawStatus, status})
+
+    // race evaluate (random)
+    let { temptSection } = initUmaRandCond(temptRate)
+	  umasParams.push({
+	  	umaId: uma.umaId,
+	  	index: uma.index,
+	  	rawStatus, status, 
+	  	skillActRate, temptRate, spCostCoef, spMax, v, a, safeSpurtSp, posKeepRate, usingStyle,
+	  	temptSection 
+	  })
+
+  })
+
+  return umasParams
+
+}
+

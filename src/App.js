@@ -1,7 +1,7 @@
 import React from 'react'
 // import BaseForm from './components/BaseForm'
 
-import Simulator from './components/Simulator'
+import RaceForm from './components/RaceForm'
 
 const App = () => {
   Number.prototype.round = function() {
@@ -12,7 +12,7 @@ const App = () => {
     <div>
 {/*      <BaseForm />
 */}    
-      <Simulator/>
+      <RaceForm/>
 
     </div>
   )
